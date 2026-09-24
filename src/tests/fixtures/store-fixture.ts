@@ -404,6 +404,12 @@ export interface FixtureOptions {
    */
   readonly version?: FixtureVersion;
   /**
+   * Seed the golden rows? Default true. `false` builds a schema-only store
+   * (no series/observations/predictions/... rows) for zero-state tests —
+   * SC-005's "empty store renders zero states, no errors".
+   */
+  readonly seed?: boolean;
+  /**
    * Extra positions to seed beyond the golden realized one (variant tests:
    * open-position marks, window filtering). Seeded verbatim — respect the
    * UNIQUE(market_ticker, side, opened_at) constraint.
@@ -465,16 +471,17 @@ export function buildStoreFixture(options: FixtureOptions = {}): StoreFixture {
     if (version >= 2) insert(db, "schema_version", { version: 2, applied_at: v2AppliedAt });
     if (version >= 3) insert(db, "schema_version", { version: 3, applied_at: v3AppliedAt });
 
-    for (const row of SERIES_ROWS) insert(db, "series", row);
-    for (const row of RUNS_ROWS) insert(db, "runs", row);
-    for (const row of PREDICTIONS) insert(db, "predictions", row as unknown as Row);
-    for (const row of POSITIONS_ROWS) insert(db, "positions", row);
-    for (const p of options.extraPositions ?? []) {
+    const seed = options.seed ?? true;
+    for (const row of seed ? SERIES_ROWS : []) insert(db, "series", row);
+    for (const row of seed ? RUNS_ROWS : []) insert(db, "runs", row);
+    for (const row of seed ? PREDICTIONS : []) insert(db, "predictions", row as unknown as Row);
+    for (const row of seed ? POSITIONS_ROWS : []) insert(db, "positions", row);
+    for (const p of seed ? (options.extraPositions ?? []) : []) {
       insert(db, "positions", { ...p, created_at: p.opened_at });
     }
-    for (const row of MARKETS_ROWS) insert(db, "markets", row);
-    for (const row of QUOTES_ROWS) insert(db, "quotes", row);
-    for (const q of options.extraQuotes ?? []) {
+    for (const row of seed ? MARKETS_ROWS : []) insert(db, "markets", row);
+    for (const row of seed ? QUOTES_ROWS : []) insert(db, "quotes", row);
+    for (const q of seed ? (options.extraQuotes ?? []) : []) {
       insert(db, "quotes", {
         market_ticker: q.market_ticker,
         end_period_ts: 1790190000,
@@ -488,7 +495,7 @@ export function buildStoreFixture(options: FixtureOptions = {}): StoreFixture {
         fetched_at: "2026-09-24T12:00:00Z",
       });
     }
-    for (const p of options.extraPredictions ?? []) {
+    for (const p of seed ? (options.extraPredictions ?? []) : []) {
       const row: PredictionSeed = {
         series_id: null,
         event_ticker: null,
@@ -508,12 +515,12 @@ export function buildStoreFixture(options: FixtureOptions = {}): StoreFixture {
       } as PredictionSeed;
       insert(db, "predictions", row as unknown as Row);
     }
-    for (const row of SETTLEMENTS_ROWS) insert(db, "settlements", row);
-    for (const row of CACHE_META_ROWS) insert(db, "cache_meta", row);
-    for (const row of options.extraCacheMeta ?? []) {
+    for (const row of seed ? SETTLEMENTS_ROWS : []) insert(db, "settlements", row);
+    for (const row of seed ? CACHE_META_ROWS : []) insert(db, "cache_meta", row);
+    for (const row of seed ? (options.extraCacheMeta ?? []) : []) {
       insert(db, "cache_meta", { ...row, bytes: null });
     }
-    for (const row of allObservations()) insert(db, "observations", row);
+    for (const row of seed ? allObservations() : []) insert(db, "observations", row);
     db.close();
   } catch (err) {
     db.close();
@@ -564,4 +571,21 @@ export function reopenFixtureHandle(fixture: StoreFixture, readOnly = true): Dat
   fixture.db.close();
   fixture.db = new DatabaseSync(fixture.path, { readOnly });
   return fixture.db;
+}
+
+/**
+ * Temporarily reopen the fixture's handle WRITABLE and run `fn` — fixture
+ * zone only (e.g. seeding a variant or emptying a table for a zero-state
+ * test). Never used by anything under src/lib: the data layer keeps its
+ * read-only guarantee end to end.
+ */
+export function withWritable<T>(fixture: StoreFixture, fn: (db: DatabaseSync) => T): T {
+  fixture.db.close();
+  const writable = new DatabaseSync(fixture.path);
+  try {
+    return fn(writable);
+  } finally {
+    writable.close();
+    fixture.db = new DatabaseSync(fixture.path, { readOnly: true });
+  }
 }
