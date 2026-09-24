@@ -140,15 +140,7 @@ async function pnl(
       ? null
       : new Date(options.now - WINDOW_MS[window]).toISOString().slice(0, 10);
 
-  const realizedRows = store.db
-    .prepare(
-      `SELECT p.* FROM positions p
-       WHERE p.settled_at IS NOT NULL AND p.settled_at >= ?
-       ORDER BY p.settled_at ASC`
-    )
-    .all(minDate ?? "") as unknown as PositionRow[];
-
-  // 'all' = no time filter (D4).
+  // 'all' = no time filter (D4); otherwise settled_at >= window start.
   const allRealized =
     minDate === null
       ? (store.db
@@ -157,7 +149,13 @@ async function pnl(
              WHERE p.settled_at IS NOT NULL ORDER BY p.settled_at ASC`
           )
           .all() as unknown as PositionRow[])
-      : realizedRows;
+      : (store.db
+          .prepare(
+            `SELECT p.* FROM positions p
+             WHERE p.settled_at IS NOT NULL AND p.settled_at >= ?
+             ORDER BY p.settled_at ASC`
+          )
+          .all(minDate) as unknown as PositionRow[]);
 
   const openRows = store.db
     .prepare(
@@ -165,27 +163,22 @@ async function pnl(
     )
     .all() as unknown as PositionRow[];
 
-  let totalRealized = 0;
-  const realized = allRealized.map((row) => {
-    totalRealized += row.realized_pnl ?? 0;
-    return mapRealized(row);
-  });
-
-  // Optional family filter: a position belongs to the family whose
-  // series.family name is a prefix of its market_ticker (the store's natural
-  // ticker scheme: KXDIESELD-26SEP24-T6.515 -> KXDIESELD). Longest family
-  // prefix wins so KXAAAGASM is not swallowed by KXAAAGASD.
+  // Optional family filter: a position belongs to the family whose name is a
+  // prefix of its market_ticker (the store's ticker scheme:
+  // KXDIESELD-26SEP24-T6.515 -> KXDIESELD); the `${family}-` guard keeps
+  // KXAAAGASM from being swallowed by KXAAAGASD.
   const familyFiltered = (ticker: string): boolean => {
     if (family === null) return true;
-    const prefix = `${family}-`;
-    return ticker.startsWith(prefix);
+    return ticker.startsWith(`${family}-`);
   };
 
+  const realized = allRealized
+    .filter((row) => familyFiltered(row.market_ticker))
+    .map(mapRealized);
+
   return {
-    realized: realized.filter((r) => familyFiltered(r.marketTicker)),
-    totalRealized: realized
-      .filter((r) => familyFiltered(r.marketTicker))
-      .reduce((sum, r) => sum + r.realizedPnl, 0),
+    realized,
+    totalRealized: realized.reduce((sum, r) => sum + r.realizedPnl, 0),
     open: openRows
       .filter((r) => familyFiltered(r.market_ticker))
       .map((row) => markOpen(store, row)),

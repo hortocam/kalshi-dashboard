@@ -21,7 +21,7 @@
  * builder must create the schema and seed rows (documented in
  * invariant-scan.ts). Nothing under src/lib ever issues a write.
  */
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -327,7 +327,7 @@ function dieseldObservations(): Row[] {
 }
 
 /** HO=F / RB=F price series (yahoo_close points) — today_close stale artifacts. */
-function priceSeriesObservations(seriesId: number, start: number, step: number): Row[] {
+function priceSeriesObservations(seriesId: number, start: number): Row[] {
   const rows: Row[] = [];
   for (let i = 0; i < 7; i++) {
     const date = isoDate(Date.UTC(2026, 8, 15), i); // 2026-09-15 .. 2026-09-21
@@ -382,8 +382,8 @@ function allObservations(): Row[] {
   }
   rows.push(...GASD_DEVICE_DATES);
   rows.push(...dieseldObservations());
-  rows.push(...priceSeriesObservations(3, 4.65, 0.05)); // HO=F
-  rows.push(...priceSeriesObservations(4, 3.45, -0.02)); // RB=F
+  rows.push(...priceSeriesObservations(3, 4.65)); // HO=F
+  rows.push(...priceSeriesObservations(4, 3.45)); // RB=F
   rows.push(
     { series_id: 6, obs_date: "2026-08-31", value: null, value_lo: 4.08, value_hi: 4.09, unit: "USD/gal", source: "kalshi_settlement", quality: "final", asof: "2026-08-31T13:00:31Z", fetched_at: "2026-09-24T03:29:14.425786Z" },
     { series_id: 5, obs_date: "2026-09-19", value: null, value_lo: 39.6, value_hi: 39.7, unit: null, source: "kalshi_settlement", quality: "final", asof: "2026-09-19T17:30:54Z", fetched_at: "2026-09-24T03:23:25.499163Z" },

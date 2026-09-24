@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 
-import { buildStoreFixture, type FixtureOptions, type StoreFixture } from "@/tests/fixtures/store-fixture";
+import { buildStoreFixture, type StoreFixture } from "@/tests/fixtures/store-fixture";
 import { openStore } from "@/lib/store/open";
 import { getStoreStatus } from "@/lib/store/freshness";
 
