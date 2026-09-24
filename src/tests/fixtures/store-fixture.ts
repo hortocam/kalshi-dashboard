@@ -221,8 +221,8 @@ interface PredictionSeed {
   market_price: number;
   edge_points: number;
   direction: string;
-  point_forecast: number;
-  forecast_sd: number;
+  point_forecast: number | null;
+  forecast_sd: number | null;
   rationale: string;
   resolved_at: string | null;
   outcome: string | null;

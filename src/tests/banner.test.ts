@@ -49,7 +49,8 @@ describe("getLatestRecommendations (T016, FR-004 / D5)", () => {
         targetDate: "2026-09-25",
         traded: false, // position_id NULL
       });
-      expect(diesel?.rationale.length).toBeGreaterThan(0);
+      expect(diesel?.predictionId).toBe(10);
+      expect(diesel?.rationale ?? "").toContain("fixture rationale");
       expect(diesel?.run.startedAt).toBe("2026-09-24T13:00:12.610842Z");
       expect(diesel?.run.digestHashPrefix).toBe("afa7b2b2645be788".slice(0, 8));
 
