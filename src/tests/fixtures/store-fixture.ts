@@ -441,6 +441,12 @@ export interface FixtureOptions {
     n_rows: number | null;
     note: string;
   }[];
+  /**
+   * Link a position to a prediction on the prediction side (the store's
+   * authoritative v2 link, predictions.position_id) after both rows are
+   * seeded. Used by traded-flag tests.
+   */
+  readonly linkPositions?: { predictionId: number; positionId: number }[];
 }
 
 /**
@@ -521,6 +527,12 @@ export function buildStoreFixture(options: FixtureOptions = {}): StoreFixture {
       insert(db, "cache_meta", { ...row, bytes: null });
     }
     for (const row of seed ? allObservations() : []) insert(db, "observations", row);
+    for (const link of seed ? (options.linkPositions ?? []) : []) {
+      db.prepare("UPDATE predictions SET position_id = ? WHERE id = ?").run(
+        link.positionId,
+        link.predictionId
+      );
+    }
     db.close();
   } catch (err) {
     db.close();
