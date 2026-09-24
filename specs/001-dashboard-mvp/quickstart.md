@@ -16,7 +16,7 @@ its expected outcome. (Details live in [contracts/data-layer.md](./contracts/dat
 
 ```bash
 export KALSHI_RESEARCH_DB="$HOME/.hermes/profiles/kalshi-bot/research/kalshi.sqlite"
-export KALSHI_SKILL_REPO_DIR="/home/hermes/projects/kalshi-plugin"   # optional, enables the skill-changes card
+export KALSHI_SKILL_REPO_DIR="/home/hermes/projects/kalshi-plugin"   # optional: any checkout of github.com/hortocam/kalshi-skill works (repo root holds skills/ etc.), enables the skill-changes card
 export HOSTNAME=127.0.0.1     # default: localhost-only bind
 export PORT=3000              # default
 ```

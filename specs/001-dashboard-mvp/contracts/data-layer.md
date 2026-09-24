@@ -33,9 +33,12 @@ getSeriesWindow(family: string, window: Window): Promise<SeriesPoint[]>
 //   kalshi_expiration_value); one point per date:
 //   SeriesPoint = { obsDate, value: number|null, lo: number|null, hi: number|null,
 //                   mid: number|null, source, quality, unit }
-//   golden (fixture A, KXDIESELD 'all'): 53 distinct dates; 2026-09-24 carries a
-//   kalshi_settlement band lo=6.51 hi=6.515 (value null, mid 6.5125) — the point row for
-//   2026-09-23 (kalshi_expiration_value, value 6.5217) coexists on the prior date.
+//   golden (fixture A, KXDIESELD 'all'): 53 distinct dates; series-of-record on BOTH
+//   2026-09-23 and 2026-09-24 is the kalshi_settlement band (09-23: lo 6.52 hi 6.525,
+//   mid 6.5225; 09-24: lo 6.51 hi 6.515, mid 6.5125; value null). The raw
+//   kalshi_expiration_value points 6.5217 (09-23) / 6.5141 (09-24) coexist raw and are
+//   dropped by source priority — a band and a point never both render for a date.
+//   Point-row selection is exercised via a synthetic fixture date (see T013).
 
 // pnl.ts — FR-001, FR-008, D4
 getPnl(window: Window): Promise<PnlView>              // see data-model.md PnlView
