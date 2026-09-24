@@ -447,6 +447,15 @@ export interface FixtureOptions {
    * seeded. Used by traded-flag tests.
    */
   readonly linkPositions?: { predictionId: number; positionId: number }[];
+  /** Extra markets rows (variant tests: open ladders for staleness rules). */
+  readonly extraMarkets?: {
+    market_ticker: string;
+    event_ticker: string;
+    close_ts: number;
+    close_time: string | null;
+    result: string | null;
+    fetched_at: string;
+  }[];
 }
 
 /**
@@ -485,7 +494,21 @@ export function buildStoreFixture(options: FixtureOptions = {}): StoreFixture {
     for (const p of seed ? (options.extraPositions ?? []) : []) {
       insert(db, "positions", { ...p, created_at: p.opened_at });
     }
-    for (const row of seed ? MARKETS_ROWS : []) insert(db, "markets", row);
+    for (const row of MARKETS_ROWS) insert(db, "markets", row);
+    for (const m of seed ? (options.extraMarkets ?? []) : []) {
+      insert(db, "markets", {
+        market_ticker: m.market_ticker,
+        event_ticker: m.event_ticker,
+        floor_strike: null,
+        strike_type: "greater",
+        result: m.result,
+        close_ts: m.close_ts,
+        close_time: m.close_time,
+        rules_hash: null,
+        asof: m.fetched_at,
+        fetched_at: m.fetched_at,
+      });
+    }
     for (const row of seed ? QUOTES_ROWS : []) insert(db, "quotes", row);
     for (const q of seed ? (options.extraQuotes ?? []) : []) {
       insert(db, "quotes", {
