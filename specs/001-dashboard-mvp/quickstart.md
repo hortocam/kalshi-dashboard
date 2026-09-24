@@ -36,8 +36,12 @@ tests pin, at minimum:
 - P&L: total realized −5.001 from one settled position; an open position with a stored quote
   marks `contracts × (quote − fill)` (yes) / `(1−quote) − fill` (no); no-quote → mark
   unavailable, not zero;
-- series: KXDIESELD 53 distinct dates; a band row (lo 6.51, hi 6.515) and a point row
-  (6.5217) coexist on adjacent dates with one value per date;
+- series: KXDIESELD 53 distinct dates; on 2026-09-23 the series-of-record row is the
+  `kalshi_settlement` band (lo 6.52, hi 6.525) — a raw `kalshi_expiration_value` point
+  (6.5217) coexists on the same date and is deduped away by source priority; on
+  2026-09-24 the series-of-record row is the band (lo 6.51, hi 6.515); point-row
+  selection is exercised by a synthetic fixture date whose highest-priority source is a
+  point;
 - invariants: store file checksum unchanged across the whole suite (read-only proof);
   no write/DDL statement anywhere under `src/`; schema gate rejects version ≠ 2;
   missing store → `StoreMissingError` → UI "store not available" state;
@@ -53,7 +57,7 @@ open http://127.0.0.1:3000/
 Expected: overall P&L **−$5.001** (window selector 7d/30d/90d/all present, default 30d);
 six family cards (HO=F, KXAAAGASD, KXAAAGASM, KXDIESELD, KXTRUMPAPPROVE, RB=F) each with
 recent prints / open positions / realized P&L; skill-changes card listing recent commits of
-the configured repo; banner card with one entry per family that has predictions (5 today)
+the configured repo; banner card with one entry per family that has predictions (4 today)
 including direction/forecast, rationale, and traded vs recorded state; as-of timestamp and
 stale-artifact count visible.
 
@@ -65,8 +69,10 @@ open http://127.0.0.1:3000/markets/KXDIESELD
 
 Expected: hit-rate scoreboard **success 2 / fail 1 / pending 1, hit rate 66.7%** — counted
 independently of position linkage (only one of these predictions has a position); historical
-chart over the last 30 days with the 2026-09-24 print shown as a band and 2026-09-23 as a
-point; the realized −$5.001 position in the P&L history with side/contracts/fill/fee; the
+chart over the last 30 days where both the 2026-09-24 and the 2026-09-23 prints render as
+bands (each date's `kalshi_settlement` band is the series-of-record; see D6) — point
+rendering is covered by V1's synthetic fixture date, not a live date; the realized −$5.001
+position in the P&L history with side/contracts/fill/fee; the
 recommendation list with per-recommendation graphs and rationales; change-notes card.
 
 Cross-check (the scoreboard must agree with the store's own verdicts):

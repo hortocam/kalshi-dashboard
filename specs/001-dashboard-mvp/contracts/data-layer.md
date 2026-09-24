@@ -56,8 +56,9 @@ getLatestRecommendations(): Promise<BannerEntry[]>
 //   one entry per family: latest prediction by runs.started_at DESC, predictions.id DESC;
 //   { family, direction, pYes, pointForecast, targetDate, rationale,
 //     traded: boolean (position_id NOT NULL), run: { startedAt, digestHashPrefix } }
-//   golden (fixture A): 5 families with ≥1 prediction; KXDIESELD entry is prediction 10
-//   (target 2026-09-25, flat, pf 6.55, rationale present, traded=false).
+//   golden (fixture A): 4 families with ≥1 attributed prediction (KXDIESELD, KXAAAGASD,
+//   KXAAAGASM, KXTRUMPAPPROVE; HO=F and RB=F none); KXDIESELD entry is prediction 10
+//   (target 2026-09-25, flat, pf 6.5225, rationale present, traded=false).
 
 // freshness.ts — FR-016, FR-017
 getStoreStatus(): Promise<StoreStatus>

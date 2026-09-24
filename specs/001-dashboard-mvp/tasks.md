@@ -59,8 +59,11 @@ shell.
       tests: missing file, version 1 store, version 3 store, happy path
 - [ ] T012 [P] [US2] `listFamilies()` + golden test (6 families, fixture A) (FR-015)
 - [ ] T013 [US2] `getSeriesWindow()` with source-priority dedupe + window filter; golden tests:
-      KXDIESELD 53 distinct dates; band row (6.51–6.515) + point row (6.5217) on adjacent
-      dates; 7d/30d/90d/all filtering (FR-007, D6)
+      KXDIESELD 53 distinct dates; on 2026-09-23 and 2026-09-24 dedupe selects the
+      `kalshi_settlement` band as series-of-record (raw `kalshi_expiration_value` points
+      6.5217 / 6.5141 coexist and are dropped — a band and a point never both render);
+      point-row selection exercised via a synthetic fixture date; 7d/30d/90d/all filtering
+      (FR-007, D6)
 - [ ] T014 [US2] `getPnl()` / `getFamilyPnl()` per PnlView semantics; golden tests: −5.001
       total; open-position mark math for yes/no sides; no-quote → mark unavailable not zero;
       window filtering by settled_at with open positions window-independent (FR-001, FR-008, D4)
