@@ -1,36 +1,53 @@
 import { NextResponse } from "next/server";
-import { existsSync } from "node:fs";
 
 import { loadConfig } from "@/lib/config";
+import { openStore, StoreError } from "@/lib/store/open";
 
 /**
  * Health endpoint (FR-018) per contracts/data-layer.md:
  *
- *   200 { ok: true,  store: { reachable, schemaVersion } }  when reachable
+ *   200 { ok: true,  store: { reachable, schemaVersion } }  when the store
+ *        opens and its schema version is supported
  *   503 { ok: false, store: { reachable, schemaVersion } }  otherwise
  *
- * P1 scope (card t_3b29d59a): "reachable" is the store existence probe only —
- * the read-only data layer (openStore, schema-version gate) lands in P2 and
- * will own `schemaVersion`. Until then schemaVersion is null in every response,
- * so the shape matches the contract while the value is honestly "not known yet".
+ * P2 scope (card t_13a59772): the read-only data layer owns `schemaVersion`.
+ * reachable now means "the store opened through openStore with a supported
+ * schema" — missing/unavailable/schema-mismatched stores all report
+ * reachable:false with the version they expose (null when unknown).
  */
 export async function GET(): Promise<NextResponse> {
-  let storeReachable: boolean;
+  let config;
   try {
-    const config = loadConfig();
-    storeReachable = existsSync(config.researchDbPath);
+    config = loadConfig();
   } catch {
     // Missing/invalid configuration: the store cannot be reachable.
-    storeReachable = false;
+    return NextResponse.json(
+      { ok: false, store: { reachable: false, schemaVersion: null } },
+      { status: 503 }
+    );
   }
 
-  const body = {
-    ok: storeReachable,
-    store: {
-      reachable: storeReachable,
-      schemaVersion: null,
-    },
-  };
-
-  return NextResponse.json(body, { status: storeReachable ? 200 : 503 });
+  try {
+    const store = openStore(config.researchDbPath);
+    try {
+      return NextResponse.json(
+        { ok: true, store: { reachable: true, schemaVersion: store.schemaVersion } },
+        { status: 200 }
+      );
+    } finally {
+      store.close();
+    }
+  } catch (err) {
+    if (err instanceof StoreError) {
+      const version =
+        err instanceof Error && "found" in err
+          ? ((err as { found: number }).found ?? null)
+          : null;
+      return NextResponse.json(
+        { ok: false, store: { reachable: false, schemaVersion: version } },
+        { status: 503 }
+      );
+    }
+    throw err;
+  }
 }
