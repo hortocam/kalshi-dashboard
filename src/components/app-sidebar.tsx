@@ -64,7 +64,7 @@ export function AppSidebar({ families }: { families: string[] }) {
                       asChild
                       isActive={pathname === `/markets/${family}`}
                     >
-                      <Link href={`/markets/${family}`}>
+                      <Link href={`/markets/${encodeURIComponent(family)}`}>
                         <span>{family}</span>
                       </Link>
                     </SidebarMenuButton>
