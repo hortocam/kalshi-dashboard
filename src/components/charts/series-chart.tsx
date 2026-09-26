@@ -1,30 +1,38 @@
 /**
- * series-chart.tsx — T031: the historical-performance chart (FR-007, D6).
- * Band rows render as a `<rect>` with a midpoint dot; point rows render as
- * a single dot. One mark per date — the store's source-priority dedupe
- * already enforced exactly one row per date (D6), so the chart never
- * double-plots. Pure presentational component over the typed
- * `SeriesPoint[]` produced by getSeriesWindow().
+ * series-chart.tsx — T031: the historical-performance chart (FR-007, D6),
+ * rendered on Recharts (plan.md stack decision; T043 migration).
  *
- * Custom SVG (no Recharts dependency for MVP): the spec pins "Recharts"
- * as the agreed stack, but a dependency-free SVG renders the four chart
- * types the data layer can produce (band-only / point-only / mixed /
- * empty) without adding a 100+ kB dependency for a single chart. The
- * contract is the visual semantics, not the rendering library.
+ * Visual contract preserved from the previous custom-SVG implementation:
+ *   - band rows render as a rectangle (lo..hi) plus a midpoint dot;
+ *   - point rows render as a single value dot;
+ *   - the chart never double-plots a band and a point on the same date
+ *     (the store's source-priority dedupe — D6 — already guarantees one
+ *     row per date upstream);
+ *   - empty points render the explicit "no observations" fallback.
  *
- * The window selector and zero-state are the parent card's responsibility
+ * The semantic data-* attributes (band count, point count) are emitted
+ * on a wrapping element so the visual contract is testable without
+ * depending on Recharts' internal SVG layout. The unit tests assert
+ * those attrs and the wrapper's testid, not Recharts' DOM details.
+ *
+ * The window selector and zero state are the parent card's responsibility
  * (HistoricalChartCard); this component assumes it has at least one point.
  */
-import type { SeriesPoint } from "@/lib/store/observations";
+"use client";
 
-/** Width / height kept fixed; Tailwind scales via the wrapping div. */
-const WIDTH = 720;
-const HEIGHT = 220;
-/** Plot area padding (axes / labels). */
-const PAD_L = 56;
-const PAD_R = 16;
-const PAD_T = 12;
-const PAD_B = 28;
+import {
+  ComposedChart,
+  ReferenceArea,
+  ReferenceDot,
+  ResponsiveContainer,
+  Scatter,
+  ScatterChart,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+
+import type { SeriesPoint } from "@/lib/store/observations";
 
 export interface SeriesChartProps {
   readonly points: readonly SeriesPoint[];
@@ -32,206 +40,177 @@ export interface SeriesChartProps {
   readonly caption?: string;
 }
 
-/** Aggregate min/max across every value, lo, hi present. */
-function valueRange(points: readonly SeriesPoint[]): {
-  min: number;
-  max: number;
-} {
+interface ChartRow {
+  /** Date string used as the X key. */
+  readonly date: string;
+  /** Band lo for ReferenceArea; null for point-only rows. */
+  readonly lo: number | null;
+  /** Band hi for ReferenceArea; null for point-only rows. */
+  readonly hi: number | null;
+  /** Point value (point rows); null for band-only rows. */
+  readonly value: number | null;
+  /** Band midpoint (band rows); null for point-only rows. */
+  readonly mid: number | null;
+}
+
+function toRows(points: readonly SeriesPoint[]): ChartRow[] {
+  return points.map((p) => ({
+    date: p.obsDate,
+    lo: p.lo,
+    hi: p.hi,
+    value: p.value,
+    mid: p.mid,
+  }));
+}
+
+function valueRange(rows: readonly ChartRow[]): { min: number; max: number } {
   let min = Number.POSITIVE_INFINITY;
   let max = Number.NEGATIVE_INFINITY;
-  for (const p of points) {
-    if (p.value !== null) {
-      if (p.value < min) min = p.value;
-      if (p.value > max) max = p.value;
-    }
-    if (p.lo !== null) {
-      if (p.lo < min) min = p.lo;
-      if (p.lo > max) max = p.lo;
-    }
-    if (p.hi !== null) {
-      if (p.hi < min) min = p.hi;
-      if (p.hi > max) max = p.hi;
+  for (const r of rows) {
+    const candidates: number[] = [];
+    if (r.lo !== null) candidates.push(r.lo);
+    if (r.hi !== null) candidates.push(r.hi);
+    if (r.value !== null) candidates.push(r.value);
+    if (r.mid !== null) candidates.push(r.mid);
+    for (const v of candidates) {
+      if (v < min) min = v;
+      if (v > max) max = v;
     }
   }
-  // Pad the range a hair so bands do not kiss the axes.
   const span = max - min;
   const pad = span === 0 ? Math.max(Math.abs(max) * 0.05, 0.001) : span * 0.08;
   return { min: min - pad, max: max + pad };
 }
 
 /**
- * The historical-performance SVG chart (T031). Band rows render as a
- * rectangle of `lo..hi` plus a midpoint dot; point rows render as a
- * single circle. Mixed (band on some dates, point on others) renders
- * exactly the same — the chart never mixes band/point for the same date
- * (the store's source-priority dedupe guarantees one row per date).
+ * The historical-performance chart (T031, T043 Recharts migration).
+ * Renders band rows as Recharts `ReferenceArea` rectangles + midpoint
+ * `ReferenceDot`, and point rows as a `Scatter` series of values.
  */
 export function SeriesChart({ points, caption }: SeriesChartProps) {
+  const bandCount = points.filter((p) => p.lo !== null).length;
+  const pointCount = points.filter((p) => p.value !== null).length;
+
   if (points.length === 0) {
-    // Parent card renders the explicit zero state; defensive fallback.
     return (
-      <svg
+      <div
         role="img"
         aria-label="historical performance chart"
         data-testid="series-chart-empty"
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        className="w-full h-auto"
+        className="w-full text-center text-xs text-muted-foreground"
       >
-        <text
-          x={WIDTH / 2}
-          y={HEIGHT / 2}
-          textAnchor="middle"
-          className="fill-muted-foreground"
-          fontSize={12}
-        >
-          no observations
-        </text>
-      </svg>
+        no observations
+      </div>
     );
   }
 
-  const { min, max } = valueRange(points);
-  const innerW = WIDTH - PAD_L - PAD_R;
-  const innerH = HEIGHT - PAD_T - PAD_B;
-  const xAt = (i: number): number =>
-    PAD_L + (points.length === 1 ? innerW / 2 : (i * innerW) / (points.length - 1));
-  const yAt = (v: number): number =>
-    PAD_T + (max === min ? innerH / 2 : (1 - (v - min) / (max - min)) * innerH);
-
-  // Y-axis ticks (4 evenly spaced).
-  const yTicks = [0, 1, 2, 3].map((i) => {
-    const v = min + ((max - min) * i) / 3;
-    return { v, y: yAt(v) };
-  });
-
-  // X-axis ticks: first / mid / last date (avoids label collision).
-  const xTicks = [
-    { x: xAt(0), label: points[0].obsDate.slice(5) },
-    {
-      x: xAt(Math.floor((points.length - 1) / 2)),
-      label: points[Math.floor((points.length - 1) / 2)].obsDate.slice(5),
-    },
-    {
-      x: xAt(points.length - 1),
-      label: points[points.length - 1].obsDate.slice(5),
-    },
-  ];
+  const rows = toRows(points);
+  const { min, max } = valueRange(rows);
 
   return (
-    <svg
-      role="img"
-      aria-label="historical performance chart"
+    <figure
       data-testid="series-chart"
-      data-band-count={points.filter((p) => p.lo !== null).length}
-      data-point-count={points.filter((p) => p.value !== null).length}
-      viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-      className="w-full h-auto"
+      data-band-count={bandCount}
+      data-point-count={pointCount}
+      className="flex flex-col gap-1"
     >
-      {/* axes */}
-      <line
-        x1={PAD_L}
-        y1={PAD_T}
-        x2={PAD_L}
-        y2={HEIGHT - PAD_B}
-        stroke="currentColor"
-        strokeOpacity={0.3}
-      />
-      <line
-        x1={PAD_L}
-        y1={HEIGHT - PAD_B}
-        x2={WIDTH - PAD_R}
-        y2={HEIGHT - PAD_B}
-        stroke="currentColor"
-        strokeOpacity={0.3}
-      />
-      {/* y-tick labels */}
-      {yTicks.map((t, i) => (
-        <g key={`y-${i}`}>
-          <line
-            x1={PAD_L - 4}
-            y1={t.y}
-            x2={PAD_L}
-            y2={t.y}
-            stroke="currentColor"
-            strokeOpacity={0.3}
-          />
-          <text
-            x={PAD_L - 6}
-            y={t.y + 4}
-            textAnchor="end"
-            fontSize={10}
-            className="fill-muted-foreground font-mono"
+      <div className="w-full h-[220px]" aria-label="historical performance chart">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart
+            data={rows}
+            margin={{ top: 12, right: 16, bottom: 28, left: 56 }}
           >
-            {t.v.toFixed(3)}
-          </text>
-        </g>
-      ))}
-      {/* x-tick labels */}
-      {xTicks.map((t, i) => (
-        <text
-          key={`x-${i}`}
-          x={t.x}
-          y={HEIGHT - PAD_B + 16}
-          textAnchor="middle"
-          fontSize={10}
-          className="fill-muted-foreground font-mono"
-        >
-          {t.label}
-        </text>
-      ))}
-
-      {/* band rectangles + midpoints */}
-      {points.map((p, i) => {
-        if (p.lo === null || p.hi === null) return null;
-        const x = xAt(i);
-        const yLo = yAt(p.hi);
-        const yHi = yAt(p.lo);
-        const rectY = Math.min(yLo, yHi);
-        const rectH = Math.max(2, Math.abs(yHi - yLo));
-        const mid = p.mid ?? (p.lo + p.hi) / 2;
-        const yMid = yAt(mid);
-        return (
-          <g key={`band-${p.obsDate}`}>
-            <rect
-              x={x - 5}
-              y={rectY}
-              width={10}
-              height={rectH}
-              fill="currentColor"
-              fillOpacity={0.18}
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 10, fill: "currentColor" }}
+              tickFormatter={(v: string) => v.slice(5)}
               stroke="currentColor"
-              strokeOpacity={0.6}
-              strokeWidth={1}
+              strokeOpacity={0.3}
             />
-            <circle cx={x} cy={yMid} r={2.5} fill="currentColor" />
-          </g>
-        );
-      })}
-      {/* point rows */}
-      {points.map((p, i) => {
-        if (p.value === null) return null;
-        return (
-          <circle
-            key={`pt-${p.obsDate}`}
-            cx={xAt(i)}
-            cy={yAt(p.value)}
-            r={3}
-            fill="currentColor"
-          />
-        );
-      })}
-
+            <YAxis
+              domain={[min, max]}
+              tick={{ fontSize: 10, fill: "currentColor" }}
+              stroke="currentColor"
+              strokeOpacity={0.3}
+              tickFormatter={(v: number) => v.toFixed(3)}
+              width={48}
+            />
+            <Tooltip
+              wrapperStyle={{ fontSize: 11 }}
+              formatter={(value: unknown, name: unknown) => {
+                if (name === "value") {
+                  const v = typeof value === "number" ? value : Number(value);
+                  return [v.toFixed(3), "point"];
+                }
+                return [String(value), String(name)];
+              }}
+            />
+            {/*
+              Band rows: ReferenceArea draws a translucent rectangle
+              spanning lo..hi on the same date; the midpoint dot is
+              drawn as a ReferenceDot on the same y-coordinate.
+            */}
+            {rows.map((r) =>
+              r.lo !== null && r.hi !== null ? (
+                <ReferenceArea
+                  key={`band-${r.date}`}
+                  x1={r.date}
+                  x2={r.date}
+                  y1={r.lo}
+                  y2={r.hi}
+                  fill="currentColor"
+                  fillOpacity={0.18}
+                  stroke="currentColor"
+                  strokeOpacity={0.6}
+                />
+              ) : null
+            )}
+            {rows.map((r) =>
+              r.mid !== null ? (
+                <ReferenceDot
+                  key={`mid-${r.date}`}
+                  x={r.date}
+                  y={r.mid}
+                  r={2.5}
+                  fill="currentColor"
+                  ifOverflow="extendDomain"
+                />
+              ) : null
+            )}
+            {/*
+              Point rows: a Scatter series keyed on `value`. Each point
+              row contributes exactly one dot.
+            */}
+            <Scatter
+              data={rows.filter((r) => r.value !== null)}
+              dataKey="value"
+              fill="currentColor"
+              isAnimationActive={false}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
       {caption === undefined ? null : (
-        <text
-          x={WIDTH / 2}
-          y={HEIGHT - 4}
-          textAnchor="middle"
-          fontSize={10}
-          className="fill-muted-foreground"
-        >
+        <figcaption className="text-[10px] text-center text-muted-foreground">
           {caption}
-        </text>
+        </figcaption>
       )}
-    </svg>
+    </figure>
   );
 }
+
+/**
+ * Internal export used by the recharts-aware unit test below: a
+ * pre-projected scatter of point rows for the `value` series. Keeping
+ * the projection in one place avoids drift if the data shape changes.
+ */
+export function pointRowsForScatter(
+  points: readonly SeriesPoint[]
+): Array<{ date: string; value: number }> {
+  return points
+    .filter((p) => p.value !== null)
+    .map((p) => ({ date: p.obsDate, value: p.value as number }));
+}
+
+/** Re-export for tests that want to render a standalone Scatter chart. */
+export const RechartsScatterChart = ScatterChart;

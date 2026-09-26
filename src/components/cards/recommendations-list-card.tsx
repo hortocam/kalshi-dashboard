@@ -10,7 +10,7 @@
  */
 import { RecommendationGraph } from "@/components/charts/recommendation-graph";
 import { directionLabel, edgeLabel } from "@/lib/banner-view";
-import { formatPrice, formatPercent, formatSignedUsd3 } from "@/lib/format";
+import { formatPrice, formatProbability, formatSignedUsd3 } from "@/lib/format";
 import type { RecommendationEntry } from "@/lib/store/recommendations";
 
 function ResolvedBadge({ entry }: { readonly entry: RecommendationEntry }) {
@@ -105,9 +105,9 @@ export function RecommendationsListCard({
                       <span> · target {entry.targetDate}</span>
                     )}
                     <span> · run {entry.run.startedAt.slice(0, 19)}Z</span>
-                    <span> · p_yes {formatPercent(entry.pYes)}</span>
+                    <span> · p_yes {formatProbability(entry.pYes)}</span>
                     {entry.marketPrice === null ? null : (
-                      <span> · market {formatPercent(entry.marketPrice)}</span>
+                      <span> · market {formatProbability(entry.marketPrice)}</span>
                     )}
                   </div>
                   <ResolvedBadge entry={entry} />

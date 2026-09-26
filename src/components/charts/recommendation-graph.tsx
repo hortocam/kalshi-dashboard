@@ -1,7 +1,8 @@
 /**
- * recommendation-graph.tsx — T033: the per-recommendation SVG graph
- * (FR-006). For one prediction, plot:
+ * recommendation-graph.tsx — T033: the per-recommendation graph (FR-006),
+ * rendered on Recharts (plan.md stack decision; T043 migration).
  *
+ * For one prediction, plot:
  *   - the forecast's confidence band — forecast_sd * 2 wide, centered on
  *     point_forecast (the canonical ±2σ band the skill communicates);
  *     band only when forecast_sd > 0 (no band for print-direction or
@@ -14,17 +15,30 @@
  *     when no print yet (the prediction's target_date is in the future
  *     or no observation was fetched).
  *
+ * Visual contract (semantic testids/data-attrs preserved):
+ *   - data-testid="rec-graph" / "rec-graph-empty"
+ *   - data-band="1" when forecast_sd > 0, "0" otherwise
+ *   - data-resolved=source when a print exists, "pending" otherwise
+ *   - the band print label "lo.toFixed(3)–hi.toFixed(3)" appears verbatim
+ *
  * Pure presentational component over `RecommendationEntry`; pure math, no
  * store access.
  */
+"use client";
+
+import {
+  ComposedChart,
+  ReferenceArea,
+  ReferenceDot,
+  ReferenceLine,
+  ResponsiveContainer,
+  YAxis,
+} from "recharts";
+
 import type { RecommendationEntry } from "@/lib/store/recommendations";
 
 const WIDTH = 240;
 const HEIGHT = 90;
-const PAD_L = 32;
-const PAD_R = 8;
-const PAD_T = 10;
-const PAD_B = 22;
 
 export function RecommendationGraph({
   entry,
@@ -41,7 +55,7 @@ export function RecommendationGraph({
       ? print.value
       : print.mid;
 
-  // Range: band (forecast ± 2*sd) and print value, padded.
+  // Anchors: forecast ± 2*sd, print value, quote price.
   const candidates: number[] = [];
   if (pf !== null) candidates.push(pf);
   if (pf !== null && sd !== null && sd > 0) {
@@ -51,26 +65,20 @@ export function RecommendationGraph({
   if (printValue !== null) candidates.push(printValue);
   if (entry.quote !== null) candidates.push(entry.quote.price);
 
+  const hasBand = pf !== null && sd !== null && sd > 0;
+
   if (candidates.length === 0) {
-    // No numeric anchors at all (pure yes/no direction with no print).
     return (
-      <svg
+      <div
         role="img"
         aria-label="recommendation graph"
         data-testid="rec-graph-empty"
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        className="w-full h-auto"
+        data-band="0"
+        data-resolved="pending"
+        className="w-[240px] text-center text-[11px] text-muted-foreground"
       >
-        <text
-          x={WIDTH / 2}
-          y={HEIGHT / 2}
-          textAnchor="middle"
-          className="fill-muted-foreground"
-          fontSize={11}
-        >
-          no numeric anchors
-        </text>
-      </svg>
+        no numeric anchors
+      </div>
     );
   }
 
@@ -81,138 +89,106 @@ export function RecommendationGraph({
   const lo = min - pad;
   const hi = max + pad;
 
-  const innerW = WIDTH - PAD_L - PAD_R;
-  const innerH = HEIGHT - PAD_T - PAD_B;
-  const yAt = (v: number): number =>
-    PAD_T + (hi === lo ? innerH / 2 : (1 - (v - lo) / (hi - lo)) * innerH);
-
-  const xMid = PAD_L + innerW / 2;
-  const xPrint = PAD_L + (innerW * 5) / 6;
-  const xQuote = PAD_L + innerW / 6;
+  // Single-row chart: x is categorical, y is the numeric value.
+  const data = [{ x: "pred", pf, lo: hasBand ? (pf as number) - 2 * (sd as number) : null, hi: hasBand ? (pf as number) + 2 * (sd as number) : null, print: printValue, quote: entry.quote?.price ?? null }];
 
   return (
-    <svg
-      role="img"
-      aria-label="recommendation graph"
+    <figure
       data-testid="rec-graph"
-      data-band={pf !== null && sd !== null && sd > 0 ? "1" : "0"}
+      data-band={hasBand ? "1" : "0"}
       data-resolved={print !== null ? print.source : "pending"}
-      viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-      className="w-full h-auto"
+      className="flex flex-col gap-1 w-[240px]"
     >
-      {/* baseline */}
-      <line
-        x1={PAD_L}
-        y1={HEIGHT - PAD_B}
-        x2={WIDTH - PAD_R}
-        y2={HEIGHT - PAD_B}
-        stroke="currentColor"
-        strokeOpacity={0.2}
-      />
-      {/* forecast confidence band (when sd available) */}
-      {pf !== null && sd !== null && sd > 0 ? (
-        <g>
-          <rect
-            x={PAD_L}
-            y={yAt(pf + 2 * sd)}
-            width={innerW}
-            height={Math.max(2, yAt(pf - 2 * sd) - yAt(pf + 2 * sd))}
-            fill="currentColor"
-            fillOpacity={0.15}
-            stroke="currentColor"
-            strokeOpacity={0.5}
-            strokeDasharray="3 2"
-          />
-          <line
-            x1={PAD_L}
-            y1={yAt(pf)}
-            x2={WIDTH - PAD_R}
-            y2={yAt(pf)}
-            stroke="currentColor"
-            strokeOpacity={0.7}
-            strokeWidth={1}
-          />
-          <text
-            x={xMid}
-            y={yAt(pf) - 4}
-            textAnchor="middle"
-            fontSize={9}
-            className="fill-muted-foreground font-mono"
+      <div
+        style={{ width: WIDTH, height: HEIGHT }}
+        aria-label="recommendation graph"
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart
+            data={data}
+            margin={{ top: 10, right: 8, bottom: 22, left: 32 }}
           >
-            pf {pf.toFixed(3)}
-          </text>
-        </g>
-      ) : null}
-
-      {/* market quote context */}
-      {entry.quote !== null ? (
-        <g>
-          <line
-            x1={xQuote}
-            y1={yAt(entry.quote.price) - 6}
-            x2={xQuote}
-            y2={yAt(entry.quote.price) + 6}
-            stroke="currentColor"
-            strokeOpacity={0.7}
-            strokeWidth={2}
-          />
-          <text
-            x={xQuote}
-            y={HEIGHT - 6}
-            textAnchor="middle"
-            fontSize={9}
-            className="fill-muted-foreground font-mono"
-          >
-            quote {entry.quote.price.toFixed(3)}
-          </text>
-        </g>
-      ) : null}
-
-      {/* resolved outcome mark */}
-      {print !== null && printValue !== null ? (
-        <g>
-          {print.lo !== null && print.hi !== null ? (
-            <rect
-              x={xPrint - 6}
-              y={yAt(print.hi)}
-              width={12}
-              height={Math.max(2, yAt(print.lo) - yAt(print.hi))}
-              fill="currentColor"
-              fillOpacity={0.4}
-              stroke="currentColor"
-              strokeOpacity={0.8}
+            <YAxis
+              domain={[lo, hi]}
+              hide
+              width={32}
             />
-          ) : (
-            <circle
-              cx={xPrint}
-              cy={yAt(printValue)}
-              r={4}
-              fill="currentColor"
-            />
-          )}
-          <text
-            x={xPrint}
-            y={HEIGHT - 6}
-            textAnchor="middle"
-            fontSize={9}
-            className="fill-muted-foreground font-mono"
-          >
+            {/* Forecast sd band (when sd available). */}
+            {hasBand ? (
+              <ReferenceArea
+                x1="pred"
+                x2="pred"
+                y1={pf - 2 * sd}
+                y2={pf + 2 * sd}
+                fill="currentColor"
+                fillOpacity={0.15}
+                stroke="currentColor"
+                strokeOpacity={0.5}
+                strokeDasharray="3 2"
+              />
+            ) : null}
+            {/* Point forecast line. */}
+            {pf !== null ? (
+              <ReferenceLine
+                y={pf}
+                stroke="currentColor"
+                strokeOpacity={0.7}
+                strokeWidth={1}
+                ifOverflow="extendDomain"
+              />
+            ) : null}
+            {/* Market quote context. */}
+            {entry.quote !== null ? (
+              <ReferenceLine
+                x="pred"
+                stroke="currentColor"
+                strokeOpacity={0.7}
+                strokeWidth={2}
+                ifOverflow="extendDomain"
+              />
+            ) : null}
+            {/* Resolved outcome mark. */}
+            {print !== null && printValue !== null ? (
+              print.lo !== null && print.hi !== null ? (
+                <ReferenceArea
+                  x1="pred"
+                  x2="pred"
+                  y1={print.lo}
+                  y2={print.hi}
+                  fill="currentColor"
+                  fillOpacity={0.4}
+                  stroke="currentColor"
+                  strokeOpacity={0.8}
+                />
+              ) : (
+                <ReferenceDot
+                  x="pred"
+                  y={printValue}
+                  r={4}
+                  fill="currentColor"
+                  ifOverflow="extendDomain"
+                />
+              )
+            ) : null}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      <figcaption className="flex justify-between text-[9px] font-mono text-muted-foreground">
+        {entry.quote === null ? (
+          <span aria-hidden="true">&nbsp;</span>
+        ) : (
+          <span>quote {entry.quote.price.toFixed(3)}</span>
+        )}
+        {print === null || printValue === null ? (
+          <span>pending</span>
+        ) : (
+          <span>
             {print.lo !== null && print.hi !== null
               ? `print ${print.lo.toFixed(3)}–${print.hi.toFixed(3)}`
               : `print ${printValue.toFixed(3)}`}
-          </text>
-        </g>
-      ) : (
-        <text
-          x={WIDTH - PAD_R - 4}
-          y={HEIGHT - PAD_B + 2}
-          textAnchor="end"
-          fontSize={9}
-          className="fill-muted-foreground"
-        >
-          pending
-        </text>
-      )}
-    </svg>
+          </span>
+        )}
+      </figcaption>
+    </figure>
   );
 }
