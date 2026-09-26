@@ -158,3 +158,17 @@ by the suite; contracts/data-layer.md invariants enforced by tests.
 - Placing trades from the dashboard.
 - Per-market token/tool cost tracking display.
 - Playwright end-to-end suite (deferred with deployment card).
+
+## Phase 6: Convergence (2026-09-26, after P4)
+
+Converged assessment of the feature's current implementation against spec.md, plan.md, and
+tasks.md. Each actionable finding is appended here as a single checklist item so a future
+implement pass can pick it up without re-running the assessment.
+
+- [ ] T043 [US2] Adopt Recharts (plan: stack decision) — replace the custom SVG charts in
+      src/components/charts/{series-chart,recommendation-graph}.tsx with Recharts components
+      (unrequested relative to the FR/AC contract, which pins visual semantics not the
+      rendering library; plan.md commits to Recharts and the deviation is the only remaining
+      item after the P4 card). The visual contract — band rows as rect+midpoint, point rows
+      as values, per-recommendation graph with forecast sd band / market quote / resolved
+      outcome mark — is preserved. (LOW, unrequested)
