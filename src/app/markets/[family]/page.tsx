@@ -30,7 +30,7 @@ import {
   StoreError,
   StoreMissingError,
 } from "@/lib/store/open";
-import { parseWindow, WINDOW_LABELS } from "@/lib/windows";
+import { parseWindow } from "@/lib/windows";
 
 /**
  * Rethrow gate for store failures — identical to the homepage's policy.

@@ -101,14 +101,6 @@ interface SeriesRow {
   family: string;
 }
 
-interface QuoteRawRow {
-  market_ticker: string;
-  hours_before_close: number;
-  close_dollars: number | null;
-  yes_bid_dollars: number | null;
-  yes_ask_dollars: number | null;
-}
-
 interface ObservationRawRow {
   obs_date: string;
   value: number | null;
