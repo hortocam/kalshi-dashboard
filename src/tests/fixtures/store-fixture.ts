@@ -429,9 +429,11 @@ export interface FixtureOptions {
   /**
    * Extra predictions (variant tests: banner tie-break, unattributed).
    * `id`/`run_id`/`market_ticker` required; the rest defaults to a pending
-   * up-call with no point forecast.
+   * up-call with no point forecast. `rationale` may be set to null or ""
+   * to exercise the callout filter's NULL/empty-handling code path —
+   * spread semantics pass through null and empty-string values.
    */
-  readonly extraPredictions?: (Partial<PredictionSeed> & Pick<PredictionSeed, "id" | "run_id" | "market_ticker">)[];
+  readonly extraPredictions?: (Partial<Omit<PredictionSeed, "rationale">> & Pick<PredictionSeed, "id" | "run_id" | "market_ticker"> & { rationale?: string | null })[];
   /** Extra cache_meta rows (variant tests: expired artifacts). */
   readonly extraCacheMeta?: {
     key: string;

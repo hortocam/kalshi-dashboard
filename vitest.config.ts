@@ -13,7 +13,7 @@ export default defineConfig({
   esbuild: { jsx: "automatic" },
   test: {
     environment: "node",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
     reporters: ["default"],
     // Data-layer golden tests build real SQLite fixtures (DDL + ~250 seed
     // rows each); 5s per test is too tight under full-suite load.
